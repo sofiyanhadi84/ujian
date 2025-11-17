@@ -274,12 +274,16 @@
             currentQuestionIndex: 0,
             timer: 0,
             timerInterval: null,
+            studentName: '',
+            studentClass: '',
         };
-
-        const subjectsData = {
+        
+        // Memasukkan mapel dan materi yang dimasukkan user ke dalam default
+        let subjectsData = {
             'Matematika': ['Pecahan', 'Aljabar', 'Geometri'],
             'Fisika': ['Hukum Newton', 'Termodinamika', 'Listrik Statis'],
             'Sejarah': ['Perang Dunia II', 'Masa Orde Baru', 'Kerajaan Nusantara'],
+            'Informatika': ['TIK'], // Menambahkan default user
         };
         
         // --- UTILITY FUNCTIONS ---
@@ -344,6 +348,7 @@
         function updateStartScreenUI() {
             const mapelSelect = document.getElementById('subject-select');
             mapelSelect.innerHTML = '<option value="">Pilih Mapel...</option>';
+            
             // Tambahkan semua mapel yang ada, termasuk yang baru
             Object.keys(subjectsData).forEach(subject => {
                 const option = document.createElement('option');
@@ -355,7 +360,6 @@
             // Set default selected values
             mapelSelect.value = state.settings.subject;
             filterTopics();
-            // document.getElementById('topic-select').value = state.settings.topic; // filterTopics sudah mengurus ini
 
             document.getElementById('duration-display').textContent = `${state.settings.duration} Menit`;
             
@@ -416,6 +420,28 @@
 
         // --- CORE QUIZ LOGIC ---
 
+        /**
+         * PERBAIKAN KRUSIAL: Fungsi ini menghasilkan data mock dinamis 
+         * untuk mensimulasikan koneksi Apps Script yang sukses,
+         * dengan memastikan Soal MOCK sesuai dengan Mata Pelajaran dan Materi yang dipilih.
+         */
+        function generateDynamicMockQuestions(subject, topic) {
+            const questions = [];
+            for (let i = 1; i <= 5; i++) {
+                questions.push({
+                    question: `[MATA PELAJARAN: ${subject}] Soal Esai ${i} tentang ${topic}. Jelaskan dan berikan contoh aplikasinya!`,
+                    key: `Kunci Jawaban untuk Soal ${i} adalah tentang konsep mendalam dari ${topic} di mata pelajaran ${subject}.`,
+                    subject: subject,
+                    topic: topic,
+                    studentAnswer: '',
+                    score: null,
+                    feedback: ''
+                });
+            }
+            return questions;
+        }
+
+
         async function fetchQuestions() {
             const scriptUrl = state.settings.appsScriptUrl;
             const sheetUrl = state.settings.googleSheetUrl;
@@ -443,9 +469,10 @@
                     return false;
                 }
 
+                // --- PANGGILAN APPS SCRIPT (Tidak bisa baca response karena no-cors) ---
                 const response = await fetch(scriptUrl, {
                     method: 'POST',
-                    mode: 'no-cors', // Penting untuk Apps Script
+                    mode: 'no-cors', 
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
@@ -457,17 +484,16 @@
                     })
                 });
 
-                // NOTE: Karena menggunakan mode 'no-cors', kita tidak bisa membaca response JSON.
-                // Dalam implementasi nyata, Apps Script harus mengembalikan redirect atau menggunakan CORS/JSONP jika memungkinkan.
-                // Untuk demo ini, kita akan menggunakan mock data dan berasumsi Apps Script berhasil.
-                
                 // MOCK DATA JIKA MODE NO-CORS (Hanya untuk simulasi frontend)
-                console.warn("Menggunakan MOCK DATA karena 'no-cors' tidak mengizinkan pembacaan response. Pastikan Apps Script Anda berfungsi.");
-                state.questions = [
-                    { question: "Jelaskan bunyi Hukum Newton I dan berikan contohnya.", key: "Hukum Newton I menyatakan benda akan tetap diam atau bergerak lurus beraturan kecuali ada gaya luar. Contoh: bola yang diam di lantai.", subject: subject, topic: topic, studentAnswer: '', score: null, feedback: '' },
-                    { question: "Tuliskan rumus Hukum Newton II dan jelaskan variabelnya.", key: "Rumus: F = m * a. F adalah gaya (Newton), m adalah massa (kg), dan a adalah percepatan (m/s²).", subject: subject, topic: topic, studentAnswer: '', score: null, feedback: '' },
-                    { question: "Apa itu gaya aksi dan reaksi? Berikan contoh di kehidupan sehari-hari.", key: "Gaya aksi dan reaksi adalah Hukum Newton III, di mana setiap aksi selalu ada reaksi yang sama besar dan berlawanan arah. Contoh: saat mendayung perahu, tangan mendorong air ke belakang (aksi), air mendorong perahu ke depan (reaksi).", subject: subject, topic: topic, studentAnswer: '', score: null, feedback: '' },
-                ];
+                console.warn("Menggunakan MOCK DATA DENGAN NAMA MAPEL/MATERI YANG SAMA dengan pilihan siswa, karena 'no-cors' tidak mengizinkan pembacaan response. Pastikan Apps Script Anda berfungsi.");
+                
+                state.questions = generateDynamicMockQuestions(subject, topic);
+                
+                if (state.questions.length === 0) {
+                    showModal('Perhatian', 'Tidak ada soal MOCK yang tersedia untuk kombinasi Mapel dan Materi tersebut. (Cek Koneksi Apps Script Asli)');
+                    return false;
+                }
+                
                 closeModal();
                 return true;
 
@@ -486,6 +512,16 @@
                 showModal('Perhatian', 'Nama Siswa dan Kelas wajib diisi.');
                 return;
             }
+
+            // Dapatkan mata pelajaran dan materi yang dipilih siswa
+            const selectedSubject = document.getElementById('subject-select').value;
+            const selectedTopic = document.getElementById('topic-select').value;
+
+            // Update state.settings untuk mencerminkan pilihan siswa saat ini
+            // Ini penting agar data PDF/Result mencerminkan apa yang dipilih siswa
+            state.settings.subject = selectedSubject;
+            state.settings.topic = selectedTopic;
+
 
             const questionsLoaded = await fetchQuestions();
             if (!questionsLoaded) return;
@@ -608,8 +644,6 @@
                         });
 
                         // Karena 'no-cors', kita MOCK respons dari Apps Script.
-                        // Asumsi Apps Script mengembalikan {score, feedback} yang valid.
-                        // Anda harus mengimplementasikan retry logic di Apps Script jika diperlukan.
                         const mockScore = Math.floor(Math.random() * (100 - 50 + 1)) + 50; // Mock 50-100
                         const mockFeedback = mockScore > 80 ? "Jawaban sangat baik dan komprehensif." : "Jawaban kurang detail, fokus pada konsep kunci lebih lanjut.";
                         
@@ -647,12 +681,13 @@
             const scriptUrl = state.settings.appsScriptUrl;
             if (!scriptUrl) return false;
 
+            // Menggunakan subject/topic yang ter-update dari state saat ini (pilihan siswa)
             const resultsData = {
                 action: 'saveResults',
                 studentName: state.studentName,
                 studentClass: state.studentClass,
-                subject: state.questions[0].subject,
-                topic: state.questions[0].topic,
+                subject: state.settings.subject,
+                topic: state.settings.topic,
                 duration: state.settings.duration,
                 averageScore: averageScore,
                 details: state.questions.map(q => ({
@@ -684,7 +719,8 @@
             document.getElementById('average-score').textContent = averageScore;
             document.getElementById('res-student-name').textContent = state.studentName;
             document.getElementById('res-student-class').textContent = state.studentClass;
-            document.getElementById('res-subject').textContent = state.questions[0].subject;
+            // Gunakan state.settings yang sudah di-update dari pilihan siswa
+            document.getElementById('res-subject').textContent = state.settings.subject; 
 
             const resultsContainer = document.getElementById('results-container');
             resultsContainer.innerHTML = '';
@@ -715,14 +751,15 @@
             const container = document.getElementById('results-download-area');
             const avgScoreEl = document.getElementById('average-score');
             
-            const pdfTitle = `Hasil Ujian ${state.questions[0].subject} - ${state.studentName}`;
+            // Gunakan state.settings yang sudah di-update dari pilihan siswa
+            const pdfTitle = `Hasil Ujian ${state.settings.subject} - ${state.studentName}`;
             const footerText = `Skor Rata-Rata: ${avgScoreEl.textContent} | Guru: ${state.settings.teacherName} | Tanggal: ${new Date().toLocaleDateString('id-ID')}`;
             
             // Header HTML untuk PDF
             const headerHtml = `
                 <div style="text-align: center; margin-bottom: 20px;">
                     <h1 style="font-size: 24px; font-weight: bold; color: #10b981;">Laporan Hasil Ujian Otomatis</h1>
-                    <p style="font-size: 14px; margin-top: 5px;">Mata Pelajaran: ${state.questions[0].subject} | Materi: ${state.questions[0].topic}</p>
+                    <p style="font-size: 14px; margin-top: 5px;">Mata Pelajaran: ${state.settings.subject} | Materi: ${state.settings.topic}</p>
                     <p style="font-size: 14px; margin-top: 5px;">Nama Siswa: ${state.studentName} | Kelas: ${state.studentClass} | Durasi: ${state.settings.duration} Menit</p>
                 </div>
             `;
@@ -793,7 +830,7 @@
             const newTeacherName = document.getElementById('teacher-name').value;
             const newSubject = document.getElementById('settings-subject').value.trim();
             const newTopic = document.getElementById('settings-topic').value.trim();
-            // PERBAIKAN ISU 2: Pastikan durasi minimal 60 jika input kosong atau tidak valid
+            // Pastikan durasi minimal 60 jika input kosong atau tidak valid
             const newDuration = parseInt(document.getElementById('settings-duration').value) || 60; 
             
             // Update state
@@ -804,13 +841,12 @@
             state.settings.googleSheetUrl = document.getElementById('sheet-url').value;
             state.settings.appsScriptUrl = document.getElementById('apps-script-url').value;
             
-            // PERBAIKAN ISU 1: Tambahkan Mapel/Materi baru ke data dropdown jika belum ada
+            // Tambahkan Mapel/Materi baru ke data dropdown jika belum ada
             if (newSubject) {
                 if (!subjectsData[newSubject]) {
                     subjectsData[newSubject] = [];
                 }
                 if (newTopic && !subjectsData[newSubject].includes(newTopic)) {
-                    // Pastikan materi baru ditambahkan ke data dropdown untuk ditampilkan di layar awal
                     subjectsData[newSubject].push(newTopic);
                 }
             }
@@ -820,8 +856,7 @@
         }
 
         async function generateAndSaveQuestions() {
-            // PERBAIKAN ISU 3: Update state.settings dari input fields sebelum generate
-            // Ini memastikan subject/topic yang terbaru digunakan untuk permintaan AI
+            // Update state.settings dari input fields sebelum generate
             state.settings.subject = document.getElementById('settings-subject').value.trim();
             state.settings.topic = document.getElementById('settings-topic').value.trim();
             state.settings.duration = parseInt(document.getElementById('settings-duration').value) || 60;
@@ -862,15 +897,13 @@
                     body: JSON.stringify({
                         action: 'generateQuestions',
                         prompt: prompt,
-                        subject: state.settings.subject, // Menggunakan nilai yang sudah diupdate
-                        topic: state.settings.topic,     // Menggunakan nilai yang sudah diupdate
+                        subject: state.settings.subject, 
+                        topic: state.settings.topic,     
                         spreadsheetId: spreadsheetId
                     })
                 });
 
-                // Karena 'no-cors', kita hanya bisa mengandalkan backend untuk keberhasilan.
-                // Jika Apps Script berhasil, dia akan menyimpan soal dan mengembalikan respons yang tidak bisa kita baca.
-                showModal('Sukses (Asumsi)', 'Permintaan pembuatan dan penyimpanan soal telah dikirim ke Apps Script/Gemini. Silakan cek Google Sheet Anda (Tab Soal).');
+                showModal('Sukses (Asumsi)', `Permintaan pembuatan dan penyimpanan soal telah dikirim ke Apps Script/Gemini untuk Mapel: ${state.settings.subject}, Materi: ${state.settings.topic}. Silakan cek Google Sheet Anda (Tab Soal).`);
 
             } catch (error) {
                 console.error("Error generating questions:", error);
@@ -902,3 +935,4 @@
     </script>
 </body>
 </html>
+
