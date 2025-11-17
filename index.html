@@ -261,8 +261,8 @@
             appsScriptUrl: 'https://script.google.com/macros/s/AKfycbzxJL5ZP-fo_OIbNt3on18Lp2rFSm0dDGDntHeJhaDIhdeNX_uulPet5k70bhc-vRiw/exec', // Ganti dengan URL deploy Apps Script Anda
             googleSheetUrl: 'https://docs.google.com/spreadsheets/d/1zsP4_VeYL2T55eLaJGVVQIq2FfazPW2T8qOtoCs1XmY/edit', // Ganti dengan URL Google Sheet Anda
             teacherName: 'Nama Guru Anda',
-            subject: 'Matematika',
-            topic: 'Pecahan',
+            subject: '',
+            topic: '',
             duration: 60, // Menit
         };
 
@@ -344,6 +344,7 @@
         function updateStartScreenUI() {
             const mapelSelect = document.getElementById('subject-select');
             mapelSelect.innerHTML = '<option value="">Pilih Mapel...</option>';
+            // Tambahkan semua mapel yang ada, termasuk yang baru
             Object.keys(subjectsData).forEach(subject => {
                 const option = document.createElement('option');
                 option.value = subject;
@@ -354,7 +355,7 @@
             // Set default selected values
             mapelSelect.value = state.settings.subject;
             filterTopics();
-            document.getElementById('topic-select').value = state.settings.topic;
+            // document.getElementById('topic-select').value = state.settings.topic; // filterTopics sudah mengurus ini
 
             document.getElementById('duration-display').textContent = `${state.settings.duration} Menit`;
             
@@ -384,7 +385,8 @@
                     topicSelect.appendChild(option);
                 });
             }
-            document.getElementById('topic-select').value = state.settings.topic;
+            // Set materi yang dipilih, baik itu default dari settings atau yang baru dipilih siswa
+            topicSelect.value = state.settings.topic;
         }
 
         function updateConfigLinkDisplay() {
@@ -787,19 +789,45 @@
         });
 
         function hideTeacherSettings() {
-            // Ambil dan simpan pengaturan baru
-            state.settings.teacherName = document.getElementById('teacher-name').value;
-            state.settings.subject = document.getElementById('settings-subject').value;
-            state.settings.topic = document.getElementById('settings-topic').value;
-            state.settings.duration = parseInt(document.getElementById('settings-duration').value) || 60;
+            // Ambil nilai dari input fields
+            const newTeacherName = document.getElementById('teacher-name').value;
+            const newSubject = document.getElementById('settings-subject').value.trim();
+            const newTopic = document.getElementById('settings-topic').value.trim();
+            // PERBAIKAN ISU 2: Pastikan durasi minimal 60 jika input kosong atau tidak valid
+            const newDuration = parseInt(document.getElementById('settings-duration').value) || 60; 
+            
+            // Update state
+            state.settings.teacherName = newTeacherName;
+            state.settings.subject = newSubject;
+            state.settings.topic = newTopic;
+            state.settings.duration = newDuration;
             state.settings.googleSheetUrl = document.getElementById('sheet-url').value;
             state.settings.appsScriptUrl = document.getElementById('apps-script-url').value;
+            
+            // PERBAIKAN ISU 1: Tambahkan Mapel/Materi baru ke data dropdown jika belum ada
+            if (newSubject) {
+                if (!subjectsData[newSubject]) {
+                    subjectsData[newSubject] = [];
+                }
+                if (newTopic && !subjectsData[newSubject].includes(newTopic)) {
+                    // Pastikan materi baru ditambahkan ke data dropdown untuk ditampilkan di layar awal
+                    subjectsData[newSubject].push(newTopic);
+                }
+            }
             
             saveSettings();
             showScreen('start-screen');
         }
 
         async function generateAndSaveQuestions() {
+            // PERBAIKAN ISU 3: Update state.settings dari input fields sebelum generate
+            // Ini memastikan subject/topic yang terbaru digunakan untuk permintaan AI
+            state.settings.subject = document.getElementById('settings-subject').value.trim();
+            state.settings.topic = document.getElementById('settings-topic').value.trim();
+            state.settings.duration = parseInt(document.getElementById('settings-duration').value) || 60;
+            state.settings.googleSheetUrl = document.getElementById('sheet-url').value;
+            state.settings.appsScriptUrl = document.getElementById('apps-script-url').value;
+            
             const prompt = document.getElementById('question-prompt').value.trim();
             const scriptUrl = state.settings.appsScriptUrl;
             const sheetUrl = state.settings.googleSheetUrl;
@@ -834,8 +862,8 @@
                     body: JSON.stringify({
                         action: 'generateQuestions',
                         prompt: prompt,
-                        subject: state.settings.subject,
-                        topic: state.settings.topic,
+                        subject: state.settings.subject, // Menggunakan nilai yang sudah diupdate
+                        topic: state.settings.topic,     // Menggunakan nilai yang sudah diupdate
                         spreadsheetId: spreadsheetId
                     })
                 });
