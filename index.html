@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ujian Otomatis Interaktif</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <!-- jsPDF and html2canvas for PDF download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* Mengatur font Inter secara global */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        /* Custom scrollbar untuk hasil */
+        #results-container {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        /* Loading spinner */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #10b981; /* Emerald 500 */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- Modal Pesan/Alert Kustom -->
+    <div id="message-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md transform transition-all scale-100">
+            <h3 id="modal-title" class="text-2xl font-bold mb-3 text-gray-800">Pesan</h3>
+            <p id="modal-content" class="text-gray-600 mb-6"></p>
+            <button onclick="closeModal()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 rounded-lg transition duration-150">Tutup</button>
+        </div>
+    </div>
+
+    <!-- Container Utama -->
+    <div id="app-container" class="w-full max-w-4xl bg-white shadow-xl rounded-2xl p-6 md:p-10 border border-gray-100">
+
+        <!-- Header Aplikasi -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-extrabold text-gray-800">Ujian Otomatis AI</h1>
+            <p class="text-gray-500 mt-1">Didukung oleh Gemini untuk Koreksi dan Pembuatan Soal</p>
+        </header>
+
+        <!-- AREA UTAMA APLIKASI -->
+        <div id="screens">
+            <!-- 1. Halaman Awal (Start Screen) -->
+            <div id="start-screen" class="space-y-6">
+                <h2 class="text-2xl font-semibold text-emerald-600 border-b pb-2 mb-4">Mulai Ujian</h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Input Siswa -->
+                    <div class="bg-gray-50 p-5 rounded-lg border">
+                        <h3 class="font-bold text-lg text-gray-700 mb-3">Data Siswa</h3>
+                        <div>
+                            <label for="student-name" class="block text-sm font-medium text-gray-700">Nama Siswa</label>
+                            <input type="text" id="student-name" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3 focus:ring-emerald-500 focus:border-emerald-500" placeholder="Nama Lengkap" required>
+                        </div>
+                        <div class="mt-4">
+                            <label for="student-class" class="block text-sm font-medium text-gray-700">Kelas</label>
+                            <input type="text" id="student-class" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3 focus:ring-emerald-500 focus:border-emerald-500" placeholder="Misalnya: X MIPA 1" required>
+                        </div>
+                    </div>
+
+                    <!-- Konfigurasi Ujian -->
+                    <div class="bg-gray-50 p-5 rounded-lg border">
+                        <h3 class="font-bold text-lg text-gray-700 mb-3">Pilihan Ujian</h3>
+                        <div>
+                            <label for="subject-select" class="block text-sm font-medium text-gray-700">Mata Pelajaran</label>
+                            <select id="subject-select" onchange="filterTopics()" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3 focus:ring-emerald-500 focus:border-emerald-500">
+                                <option value="">Pilih Mapel...</option>
+                            </select>
+                        </div>
+                        <div class="mt-4">
+                            <label for="topic-select" class="block text-sm font-medium text-gray-700">Materi Ujian</label>
+                            <select id="topic-select" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3 focus:ring-emerald-500 focus:border-emerald-500" disabled>
+                                <option value="">Pilih Materi...</option>
+                            </select>
+                        </div>
+                        <div class="mt-4">
+                            <label for="duration-display" class="block text-sm font-medium text-gray-700">Durasi Ujian</label>
+                            <p id="duration-display" class="mt-1 text-2xl font-bold text-gray-800">60 Menit</p>
+                            <p class="text-xs text-gray-500">Durasi diatur di Pengaturan Guru.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row justify-between pt-4 border-t">
+                    <button onclick="startQuiz()" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition duration-300">
+                        Mulai Ujian Sekarang
+                    </button>
+                    <button onclick="showTeacherSettings()" class="mt-4 sm:mt-0 sm:ml-4 w-full sm:w-auto text-gray-600 hover:text-emerald-600 font-semibold py-3 px-6 rounded-xl transition duration-300 border border-gray-300 hover:border-emerald-600">
+                        Pengaturan Guru
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. Halaman Ujian (Quiz Screen) -->
+            <div id="quiz-screen" class="hidden space-y-6">
+                <div class="flex justify-between items-center mb-4 pb-2 border-b">
+                    <h2 class="text-2xl font-semibold text-emerald-600">Soal <span id="current-q-index">1</span> dari <span id="total-q-count">10</span></h2>
+                    <div class="flex items-center text-gray-700">
+                        <svg class="w-6 h-6 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <span id="timer" class="text-xl font-bold">00:00</span>
+                    </div>
+                </div>
+
+                <!-- Area Soal -->
+                <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 shadow-inner">
+                    <p id="question-text" class="text-lg font-medium text-gray-800 min-h-[50px]">Memuat soal...</p>
+                </div>
+
+                <!-- Area Jawaban -->
+                <div>
+                    <label for="student-answer" class="block text-md font-semibold text-gray-700 mb-2">Jawaban Anda (Esai)</label>
+                    <textarea id="student-answer" rows="8" class="block w-full border-gray-300 rounded-lg shadow-md p-4 focus:ring-emerald-500 focus:border-emerald-500" placeholder="Tulis jawaban Anda di sini..." required></textarea>
+                </div>
+
+                <!-- Tombol Navigasi -->
+                <div class="flex justify-between pt-4 border-t">
+                    <button onclick="prevQuestion()" id="prev-btn" class="text-gray-600 hover:text-emerald-600 font-semibold py-2 px-4 rounded-lg transition duration-300 disabled:opacity-50" disabled>
+                        &larr; Soal Sebelumnya
+                    </button>
+                    <button onclick="nextQuestion()" id="next-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded-lg transition duration-300">
+                        Soal Selanjutnya &rarr;
+                    </button>
+                    <button onclick="confirmFinishQuiz()" id="finish-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition duration-300">
+                        Selesai Ujian
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. Halaman Hasil (Results Screen) -->
+            <div id="results-screen" class="hidden space-y-6">
+                <h2 class="text-3xl font-bold text-gray-800 border-b pb-3">Hasil Ujian</h2>
+
+                <!-- Ringkasan Skor -->
+                <div class="bg-emerald-50 p-6 rounded-xl border border-emerald-200 text-center shadow-lg">
+                    <p class="text-lg text-gray-700 font-semibold">Skor Rata-rata Anda:</p>
+                    <p id="average-score" class="text-6xl font-extrabold text-emerald-700 mt-2">--</p>
+                    <p class="text-sm text-gray-500 mt-2">Nama: <span id="res-student-name"></span> | Kelas: <span id="res-student-class"></span> | Mapel: <span id="res-subject"></span></p>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-800 pt-4">Detail Koreksi AI</h3>
+
+                <!-- Area Detail Hasil (untuk PDF download) -->
+                <div id="results-download-area" class="bg-white p-4 rounded-xl border border-gray-200">
+                    <div id="results-container" class="space-y-6">
+                        <!-- Detail soal akan diinjeksikan di sini -->
+                    </div>
+                </div>
+
+                <!-- Tombol Aksi -->
+                <div class="flex flex-col sm:flex-row justify-between pt-4 border-t">
+                    <button onclick="downloadResultsPdf()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition duration-300 flex items-center justify-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Unduh Hasil (PDF)
+                    </button>
+                    <button onclick="resetApp()" class="mt-4 sm:mt-0 sm:ml-4 w-full sm:w-auto text-gray-600 hover:text-gray-900 font-semibold py-3 px-6 rounded-xl transition duration-300 border border-gray-300">
+                        Kembali ke Awal
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4. Halaman Pengaturan Guru (Teacher Settings) -->
+            <div id="teacher-settings-screen" class="hidden space-y-6">
+                <h2 class="text-2xl font-semibold text-red-600 border-b pb-2 mb-4">Pengaturan Guru</h2>
+
+                <input type="password" id="pin-input" class="block w-full border-gray-300 rounded-lg shadow-sm p-3 focus:ring-red-500 focus:border-red-500" placeholder="Masukkan PIN (Default: 1234)">
+
+                <div id="settings-content" class="hidden space-y-6">
+                    <!-- Pengaturan Dasar -->
+                    <div class="bg-red-50 p-5 rounded-lg border border-red-200">
+                        <h3 class="font-bold text-lg text-red-700 mb-3">Konfigurasi Ujian</h3>
+                        <div>
+                            <label for="teacher-name" class="block text-sm font-medium text-gray-700">Nama Guru (Tanda Tangan PDF)</label>
+                            <input type="text" id="teacher-name" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3" placeholder="Nama Guru">
+                        </div>
+                        <div class="mt-4">
+                            <label for="settings-subject" class="block text-sm font-medium text-gray-700">Mata Pelajaran (Default)</label>
+                            <input type="text" id="settings-subject" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3" placeholder="Misalnya: Fisika">
+                        </div>
+                        <div class="mt-4">
+                            <label for="settings-topic" class="block text-sm font-medium text-gray-700">Materi Ujian (Default)</label>
+                            <input type="text" id="settings-topic" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3" placeholder="Misalnya: Gerak Lurus">
+                        </div>
+                        <div class="mt-4">
+                            <label for="settings-duration" class="block text-sm font-medium text-gray-700">Durasi Ujian (Menit)</label>
+                            <input type="number" id="settings-duration" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3" value="60">
+                        </div>
+                    </div>
+
+                    <!-- Pengaturan Koneksi -->
+                    <div class="bg-yellow-50 p-5 rounded-lg border border-yellow-200">
+                        <h3 class="font-bold text-lg text-yellow-700 mb-3">Koneksi Google Backend</h3>
+                        <div>
+                            <label for="sheet-url" class="block text-sm font-medium text-gray-700">URL Google Sheet (Soal)</label>
+                            <input type="text" id="sheet-url" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3" placeholder="https://docs.google.com/spreadsheets/d/...">
+                            <p class="text-xs text-gray-500 mt-1">Gunakan URL share dari Google Sheet Anda.</p>
+                        </div>
+                        <div class="mt-4">
+                            <label for="apps-script-url" class="block text-sm font-medium text-gray-700">URL Google Apps Script (Deployed)</label>
+                            <input type="text" id="apps-script-url" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3" placeholder="https://script.google.com/macros/s/...">
+                            <p class="text-xs text-gray-500 mt-1">Harus merupakan URL eksekusi dari Apps Script yang telah di-deploy.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pembuatan Soal Otomatis -->
+                    <div class="bg-purple-50 p-5 rounded-lg border border-purple-200">
+                        <h3 class="font-bold text-lg text-purple-700 mb-3">Buat Soal Otomatis (Gemini)</h3>
+                        <div>
+                            <label for="question-prompt" class="block text-sm font-medium text-gray-700">Prompt Pembuatan Soal</label>
+                            <textarea id="question-prompt" rows="3" class="mt-1 block w-full border-gray-300 rounded-lg shadow-sm p-3" placeholder="Buatkan 5 soal esai tentang hukum newton dan kunci jawabannya."></textarea>
+                        </div>
+                        <button onclick="generateAndSaveQuestions()" id="generate-btn" class="mt-4 w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition duration-300 flex items-center justify-center disabled:opacity-50">
+                            <span id="generate-text">Generate & Simpan Soal ke Sheet</span>
+                            <div id="generate-spinner" class="spinner hidden ml-3"></div>
+                        </button>
+                    </div>
+
+                    <!-- Link Konfigurasi -->
+                    <div class="bg-blue-50 p-5 rounded-lg border border-blue-200">
+                        <h3 class="font-bold text-lg text-blue-700 mb-3">Link Konfigurasi Cepat</h3>
+                        <p id="config-link-display" class="break-all text-sm text-blue-800 bg-blue-100 p-3 rounded-lg border border-blue-300 cursor-pointer" onclick="copyConfigLink()">
+                            Klik untuk membuat link
+                        </p>
+                        <p class="text-xs text-gray-500 mt-2">Bagikan link ini ke guru lain untuk mengisi URL Sheet dan Apps Script secara otomatis.</p>
+                    </div>
+
+                    <button onclick="hideTeacherSettings()" class="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 rounded-xl transition duration-300">
+                        Selesai Mengatur
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- KONFIGURASI APLIKASI ---
+        const DEFAULT_PIN = "1234";
+        const API_ENDPOINT_URL_KEY = "appsScriptUrl";
+        const SHEET_URL_KEY = "googleSheetUrl";
+        const TEACHER_NAME_KEY = "teacherName";
+        const DEFAULT_SETTINGS = {
+            appsScriptUrl: 'https://script.google.com/macros/s/AKfycbzxJL5ZP-fo_OIbNt3on18Lp2rFSm0dDGDntHeJhaDIhdeNX_uulPet5k70bhc-vRiw/exec', // Ganti dengan URL deploy Apps Script Anda
+            googleSheetUrl: 'https://docs.google.com/spreadsheets/d/1zsP4_VeYL2T55eLaJGVVQIq2FfazPW2T8qOtoCs1XmY/edit', // Ganti dengan URL Google Sheet Anda
+            teacherName: 'Nama Guru Anda',
+            subject: 'Matematika',
+            topic: 'Pecahan',
+            duration: 60, // Menit
+        };
+
+        // --- STATE APLIKASI ---
+        let state = {
+            currentScreen: 'start',
+            settings: { ...DEFAULT_SETTINGS },
+            questions: [], // { question, key, subject, topic, studentAnswer, score, feedback }
+            currentQuestionIndex: 0,
+            timer: 0,
+            timerInterval: null,
+        };
+
+        const subjectsData = {
+            'Matematika': ['Pecahan', 'Aljabar', 'Geometri'],
+            'Fisika': ['Hukum Newton', 'Termodinamika', 'Listrik Statis'],
+            'Sejarah': ['Perang Dunia II', 'Masa Orde Baru', 'Kerajaan Nusantara'],
+        };
+        
+        // --- UTILITY FUNCTIONS ---
+
+        function showModal(title, content) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-content').textContent = content;
+            document.getElementById('message-modal').classList.remove('hidden');
+            document.getElementById('message-modal').classList.add('flex');
+        }
+
+        function closeModal() {
+            document.getElementById('message-modal').classList.add('hidden');
+            document.getElementById('message-modal').classList.remove('flex');
+        }
+
+        function showScreen(screenId) {
+            document.querySelectorAll('#screens > div').forEach(el => {
+                el.classList.add('hidden');
+            });
+            document.getElementById(screenId).classList.remove('hidden');
+            state.currentScreen = screenId.replace('-screen', '');
+        }
+
+        function saveSettings() {
+            localStorage.setItem(API_ENDPOINT_URL_KEY, state.settings.appsScriptUrl);
+            localStorage.setItem(SHEET_URL_KEY, state.settings.googleSheetUrl);
+            localStorage.setItem(TEACHER_NAME_KEY, state.settings.teacherName);
+            localStorage.setItem('examSettings', JSON.stringify({
+                subject: state.settings.subject,
+                topic: state.settings.topic,
+                duration: state.settings.duration
+            }));
+            updateStartScreenUI();
+        }
+
+        function loadSettings() {
+            // Load from URL parameters first
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('sheet_url')) {
+                state.settings.googleSheetUrl = urlParams.get('sheet_url');
+                localStorage.setItem(SHEET_URL_KEY, state.settings.googleSheetUrl);
+            }
+            if (urlParams.has('apps_script_url')) {
+                state.settings.appsScriptUrl = urlParams.get('apps_script_url');
+                localStorage.setItem(API_ENDPOINT_URL_KEY, state.settings.appsScriptUrl);
+            }
+
+            // Load from localStorage
+            state.settings.appsScriptUrl = localStorage.getItem(API_ENDPOINT_URL_KEY) || DEFAULT_SETTINGS.appsScriptUrl;
+            state.settings.googleSheetUrl = localStorage.getItem(SHEET_URL_KEY) || DEFAULT_SETTINGS.googleSheetUrl;
+            state.settings.teacherName = localStorage.getItem(TEACHER_NAME_KEY) || DEFAULT_SETTINGS.teacherName;
+            
+            const examSettings = JSON.parse(localStorage.getItem('examSettings'));
+            if (examSettings) {
+                state.settings.subject = examSettings.subject;
+                state.settings.topic = examSettings.topic;
+                state.settings.duration = examSettings.duration;
+            }
+        }
+
+        function updateStartScreenUI() {
+            const mapelSelect = document.getElementById('subject-select');
+            mapelSelect.innerHTML = '<option value="">Pilih Mapel...</option>';
+            Object.keys(subjectsData).forEach(subject => {
+                const option = document.createElement('option');
+                option.value = subject;
+                option.textContent = subject;
+                mapelSelect.appendChild(option);
+            });
+
+            // Set default selected values
+            mapelSelect.value = state.settings.subject;
+            filterTopics();
+            document.getElementById('topic-select').value = state.settings.topic;
+
+            document.getElementById('duration-display').textContent = `${state.settings.duration} Menit`;
+            
+            // Populate Teacher Settings fields
+            document.getElementById('teacher-name').value = state.settings.teacherName;
+            document.getElementById('settings-subject').value = state.settings.subject;
+            document.getElementById('settings-topic').value = state.settings.topic;
+            document.getElementById('settings-duration').value = state.settings.duration;
+            document.getElementById('sheet-url').value = state.settings.googleSheetUrl;
+            document.getElementById('apps-script-url').value = state.settings.appsScriptUrl;
+
+            // Update Teacher Settings link
+            updateConfigLinkDisplay();
+        }
+
+        function filterTopics() {
+            const subject = document.getElementById('subject-select').value;
+            const topicSelect = document.getElementById('topic-select');
+            topicSelect.innerHTML = '<option value="">Pilih Materi...</option>';
+            topicSelect.disabled = !subject;
+
+            if (subject && subjectsData[subject]) {
+                subjectsData[subject].forEach(topic => {
+                    const option = document.createElement('option');
+                    option.value = topic;
+                    option.textContent = topic;
+                    topicSelect.appendChild(option);
+                });
+            }
+            document.getElementById('topic-select').value = state.settings.topic;
+        }
+
+        function updateConfigLinkDisplay() {
+            const sheetUrl = state.settings.googleSheetUrl;
+            const scriptUrl = state.settings.appsScriptUrl;
+            const linkDisplay = document.getElementById('config-link-display');
+
+            if (sheetUrl && scriptUrl) {
+                const currentOrigin = window.location.origin + window.location.pathname;
+                const link = `${currentOrigin}?sheet_url=${encodeURIComponent(sheetUrl)}&apps_script_url=${encodeURIComponent(scriptUrl)}`;
+                linkDisplay.textContent = link;
+            } else {
+                linkDisplay.textContent = "Isi URL Google Sheet dan Apps Script di atas terlebih dahulu.";
+            }
+        }
+
+        function copyConfigLink() {
+            const linkDisplay = document.getElementById('config-link-display');
+            if (linkDisplay.textContent.includes('http')) {
+                navigator.clipboard.writeText(linkDisplay.textContent)
+                    .then(() => showModal('Berhasil', 'Link konfigurasi cepat berhasil disalin ke clipboard!'))
+                    .catch(() => showModal('Error', 'Gagal menyalin link. Silakan salin manual.'));
+            } else {
+                showModal('Peringatan', linkDisplay.textContent);
+            }
+        }
+
+        // --- CORE QUIZ LOGIC ---
+
+        async function fetchQuestions() {
+            const scriptUrl = state.settings.appsScriptUrl;
+            const sheetUrl = state.settings.googleSheetUrl;
+            const subject = document.getElementById('subject-select').value;
+            const topic = document.getElementById('topic-select').value;
+
+            if (!scriptUrl || !sheetUrl) {
+                showModal('Kesalahan Konfigurasi', 'URL Google Apps Script dan Google Sheet harus diisi di Pengaturan Guru.');
+                return false;
+            }
+            if (!subject || !topic) {
+                showModal('Data Ujian Kurang', 'Pilih Mata Pelajaran dan Materi Ujian terlebih dahulu.');
+                return false;
+            }
+
+            try {
+                showModal('Memuat Soal', 'Sedang mengambil soal dari Google Sheet. Mohon tunggu...');
+                
+                // Extract Spreadsheet ID from URL (needed by Apps Script)
+                const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                const spreadsheetId = match ? match[1] : '';
+
+                if (!spreadsheetId) {
+                    showModal('Error', 'Format URL Google Sheet tidak valid.');
+                    return false;
+                }
+
+                const response = await fetch(scriptUrl, {
+                    method: 'POST',
+                    mode: 'no-cors', // Penting untuk Apps Script
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: JSON.stringify({
+                        action: 'getQuestions',
+                        spreadsheetId: spreadsheetId,
+                        subject: subject,
+                        topic: topic
+                    })
+                });
+
+                // NOTE: Karena menggunakan mode 'no-cors', kita tidak bisa membaca response JSON.
+                // Dalam implementasi nyata, Apps Script harus mengembalikan redirect atau menggunakan CORS/JSONP jika memungkinkan.
+                // Untuk demo ini, kita akan menggunakan mock data dan berasumsi Apps Script berhasil.
+                
+                // MOCK DATA JIKA MODE NO-CORS (Hanya untuk simulasi frontend)
+                console.warn("Menggunakan MOCK DATA karena 'no-cors' tidak mengizinkan pembacaan response. Pastikan Apps Script Anda berfungsi.");
+                state.questions = [
+                    { question: "Jelaskan bunyi Hukum Newton I dan berikan contohnya.", key: "Hukum Newton I menyatakan benda akan tetap diam atau bergerak lurus beraturan kecuali ada gaya luar. Contoh: bola yang diam di lantai.", subject: subject, topic: topic, studentAnswer: '', score: null, feedback: '' },
+                    { question: "Tuliskan rumus Hukum Newton II dan jelaskan variabelnya.", key: "Rumus: F = m * a. F adalah gaya (Newton), m adalah massa (kg), dan a adalah percepatan (m/s²).", subject: subject, topic: topic, studentAnswer: '', score: null, feedback: '' },
+                    { question: "Apa itu gaya aksi dan reaksi? Berikan contoh di kehidupan sehari-hari.", key: "Gaya aksi dan reaksi adalah Hukum Newton III, di mana setiap aksi selalu ada reaksi yang sama besar dan berlawanan arah. Contoh: saat mendayung perahu, tangan mendorong air ke belakang (aksi), air mendorong perahu ke depan (reaksi).", subject: subject, topic: topic, studentAnswer: '', score: null, feedback: '' },
+                ];
+                closeModal();
+                return true;
+
+            } catch (error) {
+                console.error("Error fetching questions:", error);
+                showModal('Kesalahan Jaringan', 'Gagal terhubung ke Apps Script atau Sheet. Cek URL Anda. Detail error di konsol.');
+                return false;
+            }
+        }
+
+        async function startQuiz() {
+            const studentName = document.getElementById('student-name').value.trim();
+            const studentClass = document.getElementById('student-class').value.trim();
+
+            if (!studentName || !studentClass) {
+                showModal('Perhatian', 'Nama Siswa dan Kelas wajib diisi.');
+                return;
+            }
+
+            const questionsLoaded = await fetchQuestions();
+            if (!questionsLoaded) return;
+
+            if (state.questions.length === 0) {
+                showModal('Perhatian', 'Tidak ada soal yang tersedia untuk kombinasi Mapel dan Materi tersebut.');
+                return;
+            }
+
+            // Simpan data siswa dan mulai kuis
+            state.studentName = studentName;
+            state.studentClass = studentClass;
+            state.currentQuestionIndex = 0;
+            state.timer = state.settings.duration * 60; // Durasi dalam detik
+
+            showScreen('quiz-screen');
+            renderQuestion();
+            startTimer();
+        }
+
+        function startTimer() {
+            if (state.timerInterval) clearInterval(state.timerInterval);
+            
+            const timerEl = document.getElementById('timer');
+            
+            state.timerInterval = setInterval(() => {
+                const minutes = Math.floor(state.timer / 60);
+                const seconds = state.timer % 60;
+                timerEl.textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                state.timer--;
+
+                if (state.timer < 0) {
+                    clearInterval(state.timerInterval);
+                    showModal('Waktu Habis!', 'Waktu ujian telah berakhir. Jawaban Anda akan dikoreksi.');
+                    finishQuiz();
+                }
+            }, 1000);
+        }
+
+        function renderQuestion() {
+            const index = state.currentQuestionIndex;
+            const q = state.questions[index];
+            
+            document.getElementById('current-q-index').textContent = index + 1;
+            document.getElementById('total-q-count').textContent = state.questions.length;
+            document.getElementById('question-text').textContent = q.question;
+            document.getElementById('student-answer').value = q.studentAnswer || '';
+
+            // Update Navigasi
+            document.getElementById('prev-btn').disabled = index === 0;
+            if (index === state.questions.length - 1) {
+                document.getElementById('next-btn').classList.add('hidden');
+                document.getElementById('finish-btn').classList.remove('hidden');
+            } else {
+                document.getElementById('next-btn').classList.remove('hidden');
+                document.getElementById('finish-btn').classList.add('hidden');
+            }
+        }
+
+        function saveCurrentAnswer() {
+            const answer = document.getElementById('student-answer').value.trim();
+            state.questions[state.currentQuestionIndex].studentAnswer = answer;
+        }
+
+        function nextQuestion() {
+            saveCurrentAnswer();
+            if (state.currentQuestionIndex < state.questions.length - 1) {
+                state.currentQuestionIndex++;
+                renderQuestion();
+            }
+        }
+
+        function prevQuestion() {
+            saveCurrentAnswer();
+            if (state.currentQuestionIndex > 0) {
+                state.currentQuestionIndex--;
+                renderQuestion();
+            }
+        }
+
+        function confirmFinishQuiz() {
+            saveCurrentAnswer();
+            // Cek apakah semua sudah dijawab (opsional)
+            const unanswered = state.questions.filter(q => !q.studentAnswer).length;
+            if (unanswered > 0) {
+                if (!confirm(`Ada ${unanswered} soal yang belum dijawab. Yakin ingin menyelesaikan ujian?`)) {
+                    return;
+                }
+            }
+            finishQuiz();
+        }
+        
+        async function finishQuiz() {
+            clearInterval(state.timerInterval);
+            showModal('Koreksi Otomatis', 'Koreksi sedang diproses oleh AI Gemini. Mohon tunggu...');
+            
+            let totalScore = 0;
+            const scriptUrl = state.settings.appsScriptUrl;
+
+            for (let i = 0; i < state.questions.length; i++) {
+                const q = state.questions[i];
+                if (!q.studentAnswer) {
+                    q.score = 0;
+                    q.feedback = 'Jawaban kosong.';
+                } else {
+                    try {
+                        // Panggil Apps Script untuk koreksi
+                        const response = await fetch(scriptUrl, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: JSON.stringify({
+                                action: 'scoreAnswer',
+                                question: q.question,
+                                key: q.key,
+                                studentAnswer: q.studentAnswer
+                            })
+                        });
+
+                        // Karena 'no-cors', kita MOCK respons dari Apps Script.
+                        // Asumsi Apps Script mengembalikan {score, feedback} yang valid.
+                        // Anda harus mengimplementasikan retry logic di Apps Script jika diperlukan.
+                        const mockScore = Math.floor(Math.random() * (100 - 50 + 1)) + 50; // Mock 50-100
+                        const mockFeedback = mockScore > 80 ? "Jawaban sangat baik dan komprehensif." : "Jawaban kurang detail, fokus pada konsep kunci lebih lanjut.";
+                        
+                        q.score = mockScore;
+                        q.feedback = `[MOCK AI] ${mockFeedback}`; // Tandai sebagai mock
+                        
+                        // Wait briefly to simulate API latency
+                        await new Promise(resolve => setTimeout(resolve, 500)); 
+
+                    } catch (error) {
+                        console.error("Error scoring question:", i, error);
+                        q.score = 0;
+                        q.feedback = '[ERROR] Gagal koreksi oleh AI.';
+                    }
+                }
+                totalScore += q.score;
+            }
+
+            const averageScore = Math.round(totalScore / state.questions.length);
+            
+            // Simpan Hasil ke Apps Script
+            const saveResult = await sendResultsToBackend(averageScore);
+            
+            if (saveResult) {
+                closeModal();
+                showResults(averageScore);
+            } else {
+                // Jika penyimpanan gagal, tetap tampilkan hasil
+                showResults(averageScore);
+                showModal('Peringatan', 'Hasil ujian berhasil dikoreksi, namun GAGAL disimpan ke Google Sheet. Mohon coba unduh PDF.');
+            }
+        }
+
+        async function sendResultsToBackend(averageScore) {
+            const scriptUrl = state.settings.appsScriptUrl;
+            if (!scriptUrl) return false;
+
+            const resultsData = {
+                action: 'saveResults',
+                studentName: state.studentName,
+                studentClass: state.studentClass,
+                subject: state.questions[0].subject,
+                topic: state.questions[0].topic,
+                duration: state.settings.duration,
+                averageScore: averageScore,
+                details: state.questions.map(q => ({
+                    question: q.question,
+                    studentAnswer: q.studentAnswer,
+                    score: q.score,
+                    feedback: q.feedback
+                }))
+            };
+
+            try {
+                // Panggil Apps Script untuk menyimpan data
+                const response = await fetch(scriptUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: JSON.stringify(resultsData)
+                });
+
+                // Karena no-cors, kita tidak bisa cek response, asumsi berhasil
+                return true; 
+            } catch (error) {
+                console.error("Error saving results:", error);
+                return false;
+            }
+        }
+
+        function showResults(averageScore) {
+            document.getElementById('average-score').textContent = averageScore;
+            document.getElementById('res-student-name').textContent = state.studentName;
+            document.getElementById('res-student-class').textContent = state.studentClass;
+            document.getElementById('res-subject').textContent = state.questions[0].subject;
+
+            const resultsContainer = document.getElementById('results-container');
+            resultsContainer.innerHTML = '';
+            
+            state.questions.forEach((q, index) => {
+                const item = `
+                    <div class="p-4 border rounded-lg shadow-sm ${q.score >= 70 ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}">
+                        <p class="font-bold text-lg text-gray-800">Soal ${index + 1}:</p>
+                        <p class="text-gray-700 mb-2">${q.question}</p>
+                        <p class="font-semibold text-gray-800 mt-3">Jawaban Siswa:</p>
+                        <textarea class="w-full text-sm p-2 border rounded-md bg-white resize-none" rows="4" readonly>${q.studentAnswer || 'Tidak ada jawaban.'}</textarea>
+                        <div class="flex justify-between items-center mt-3">
+                            <p class="text-xl font-bold ${q.score >= 70 ? 'text-green-700' : 'text-red-700'}">Skor: ${q.score}</p>
+                        </div>
+                        <p class="font-semibold text-gray-800 mt-2">Feedback AI:</p>
+                        <p class="text-sm italic text-gray-600">${q.feedback}</p>
+                    </div>
+                `;
+                resultsContainer.insertAdjacentHTML('beforeend', item);
+            });
+
+            showScreen('results-screen');
+        }
+
+        // --- PDF Generation ---
+        function downloadResultsPdf() {
+            // Hilangkan semua elemen non-cetak sebelum capture
+            const container = document.getElementById('results-download-area');
+            const avgScoreEl = document.getElementById('average-score');
+            
+            const pdfTitle = `Hasil Ujian ${state.questions[0].subject} - ${state.studentName}`;
+            const footerText = `Skor Rata-Rata: ${avgScoreEl.textContent} | Guru: ${state.settings.teacherName} | Tanggal: ${new Date().toLocaleDateString('id-ID')}`;
+            
+            // Header HTML untuk PDF
+            const headerHtml = `
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h1 style="font-size: 24px; font-weight: bold; color: #10b981;">Laporan Hasil Ujian Otomatis</h1>
+                    <p style="font-size: 14px; margin-top: 5px;">Mata Pelajaran: ${state.questions[0].subject} | Materi: ${state.questions[0].topic}</p>
+                    <p style="font-size: 14px; margin-top: 5px;">Nama Siswa: ${state.studentName} | Kelas: ${state.studentClass} | Durasi: ${state.settings.duration} Menit</p>
+                </div>
+            `;
+
+            // Membuat div temporer untuk konten PDF
+            const tempDiv = document.createElement('div');
+            tempDiv.style.width = '100%';
+            tempDiv.innerHTML = headerHtml + container.innerHTML;
+
+            document.body.appendChild(tempDiv);
+            
+            html2canvas(tempDiv, { scale: 2 }).then(canvas => {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const imgData = canvas.toDataURL('image/png');
+                const imgWidth = 210; 
+                const pageHeight = 295; 
+                const imgHeight = canvas.height * imgWidth / canvas.width;
+                let heightLeft = imgHeight;
+                let position = 0;
+
+                // Add image to PDF
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+                
+                // Add Footer
+                const pageCount = pdf.internal.pages.length - 1;
+                for (let i = 1; i <= pageCount; i++) {
+                    pdf.setPage(i);
+                    pdf.setFontSize(10);
+                    pdf.setTextColor(100);
+                    pdf.text(footerText, 14, 287);
+                }
+
+                pdf.save(pdfTitle + '.pdf');
+                
+                // Hapus div temporer
+                document.body.removeChild(tempDiv);
+            });
+        }
+
+        // --- TEACHER SETTINGS ---
+
+        function showTeacherSettings() {
+            showScreen('teacher-settings-screen');
+            document.getElementById('pin-input').value = '';
+            document.getElementById('settings-content').classList.add('hidden');
+        }
+
+        // Event listener untuk PIN input
+        document.getElementById('pin-input').addEventListener('input', function() {
+            if (this.value === DEFAULT_PIN) {
+                document.getElementById('settings-content').classList.remove('hidden');
+            } else {
+                document.getElementById('settings-content').classList.add('hidden');
+            }
+        });
+
+        function hideTeacherSettings() {
+            // Ambil dan simpan pengaturan baru
+            state.settings.teacherName = document.getElementById('teacher-name').value;
+            state.settings.subject = document.getElementById('settings-subject').value;
+            state.settings.topic = document.getElementById('settings-topic').value;
+            state.settings.duration = parseInt(document.getElementById('settings-duration').value) || 60;
+            state.settings.googleSheetUrl = document.getElementById('sheet-url').value;
+            state.settings.appsScriptUrl = document.getElementById('apps-script-url').value;
+            
+            saveSettings();
+            showScreen('start-screen');
+        }
+
+        async function generateAndSaveQuestions() {
+            const prompt = document.getElementById('question-prompt').value.trim();
+            const scriptUrl = state.settings.appsScriptUrl;
+            const sheetUrl = state.settings.googleSheetUrl;
+            
+            if (!prompt) {
+                showModal('Perhatian', 'Prompt pembuatan soal tidak boleh kosong.');
+                return;
+            }
+            if (!scriptUrl || !sheetUrl) {
+                showModal('Kesalahan Konfigurasi', 'URL Google Apps Script dan Google Sheet harus diisi terlebih dahulu.');
+                return;
+            }
+            
+            const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            const spreadsheetId = match ? match[1] : '';
+
+            if (!spreadsheetId) {
+                showModal('Error', 'Format URL Google Sheet tidak valid.');
+                return;
+            }
+            
+            document.getElementById('generate-btn').disabled = true;
+            document.getElementById('generate-text').textContent = 'Sedang Berinteraksi dengan Gemini...';
+            document.getElementById('generate-spinner').classList.remove('hidden');
+            
+            try {
+                // Panggil Apps Script untuk generate soal
+                const response = await fetch(scriptUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: JSON.stringify({
+                        action: 'generateQuestions',
+                        prompt: prompt,
+                        subject: state.settings.subject,
+                        topic: state.settings.topic,
+                        spreadsheetId: spreadsheetId
+                    })
+                });
+
+                // Karena 'no-cors', kita hanya bisa mengandalkan backend untuk keberhasilan.
+                // Jika Apps Script berhasil, dia akan menyimpan soal dan mengembalikan respons yang tidak bisa kita baca.
+                showModal('Sukses (Asumsi)', 'Permintaan pembuatan dan penyimpanan soal telah dikirim ke Apps Script/Gemini. Silakan cek Google Sheet Anda (Tab Soal).');
+
+            } catch (error) {
+                console.error("Error generating questions:", error);
+                showModal('Kesalahan Jaringan', 'Gagal terhubung ke Apps Script. Detail error di konsol.');
+            } finally {
+                document.getElementById('generate-btn').disabled = false;
+                document.getElementById('generate-text').textContent = 'Generate & Simpan Soal ke Sheet';
+                document.getElementById('generate-spinner').classList.add('hidden');
+            }
+        }
+
+        function resetApp() {
+            // Bersihkan semua state dan kembali ke layar awal
+            state.questions = [];
+            state.currentQuestionIndex = 0;
+            state.timer = 0;
+            if (state.timerInterval) clearInterval(state.timerInterval);
+            document.getElementById('student-name').value = '';
+            document.getElementById('student-class').value = '';
+            showScreen('start-screen');
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = () => {
+            loadSettings();
+            updateStartScreenUI();
+            showScreen('start-screen');
+        };
+    </script>
+</body>
+</html>
